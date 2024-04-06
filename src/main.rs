@@ -1,0 +1,18 @@
+mod input;
+mod player;
+mod entity;
+
+use bevy::prelude::*;
+use crate::player::PlayerPlugin;
+use crate::input::InputPlugin;
+use crate::entity::EntityPlugin;
+
+fn main() {
+    App::new()
+        .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
+        .insert_resource(Msaa::Off)
+        .add_plugins(InputPlugin)
+        .add_plugins(PlayerPlugin)
+        .add_plugins(EntityPlugin)
+        .run();
+}
