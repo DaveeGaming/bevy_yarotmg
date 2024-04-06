@@ -1,5 +1,5 @@
-use bevy::prelude::*;
-use crate::entity::EntityRotate;
+use bevy::{prelude::*, render::view::window, window::PrimaryWindow};
+use crate::{entity::EntityRotate, health::Health, projectile::{Projectile, ProjectileAsset}, weapon::Weapon};
 pub struct PlayerPlugin;
 
 impl Plugin for PlayerPlugin {
@@ -7,6 +7,35 @@ impl Plugin for PlayerPlugin {
         app.add_systems(Startup, setup);
         app.add_systems(FixedUpdate, update_player_transform);
         app.add_systems(FixedUpdate, update_player_camera);
+        app.add_systems(FixedUpdate, update_weapon);
+    }
+}
+
+
+#[derive(Component)]
+pub struct Player {
+    pub weapon: Option<Weapon>,
+    pub firing: bool,
+
+    pub velocity: Vec2,
+    pub movement_speed: f32,
+
+    pub camera_velocity: f32,
+    pub camera_rot_speed: f32,
+}
+
+impl Default for Player {
+    fn default() -> Self {
+        Player {
+            weapon: Some(Weapon::default()),
+            firing: false,
+
+            velocity: Default::default(),
+            movement_speed: 2.,
+
+            camera_velocity: 0.,
+            camera_rot_speed: 0.1,
+        }
     }
 }
 
@@ -26,35 +55,72 @@ fn setup(
         SpriteBundle {
         texture: char.clone(),
         ..default()},
-        Player::default() 
+        Player::default(),
+        Health::default(),
     )).id();
 
     commands.entity(player_id).add_child(cam_id);
     commands.spawn( ( 
-        SpriteBundle { texture: char, ..default()},
+        SpriteBundle { texture: char.clone(), ..default()},
+        Health::default(),
+        EntityRotate
+    ));
+    commands.spawn( ( 
+        SpriteBundle { texture: char, transform: Transform::from_translation(Vec3::new(20., 20., 0.)), ..default()},
+        Health::default(),
         EntityRotate
     ));
 }
 
-#[derive(Component)]
-pub struct Player {
-    pub velocity: Vec2,
-    pub movement_speed: f32,
 
-    pub camera_velocity: f32,
-    pub camera_rot_speed: f32,
-}
+fn update_weapon(
+    time: Res<Time>,
+    mut commands: Commands,
+    window: Query<&Window, With<PrimaryWindow>>,
+    camera: Query< (&Camera, &GlobalTransform)>,
+    projectile_asset: Res<ProjectileAsset>,
+    mut player: Query<(&mut Player, &Transform)>,
+) {
+    let mut p= player.get_single_mut();
 
-impl Default for Player {
-    fn default() -> Self {
-        Player {
-            velocity: Default::default(),
-            movement_speed: 2.,
+    if p.is_err() {
+        warn_once!("Unable to find player in update_weapon");
+        return;
+    }
 
-            camera_velocity: 0.,
-            camera_rot_speed: 0.1,
+    let (mut player, transform) = p.unwrap();
+    
+    if player.weapon.is_some() {
+        let firing = player.firing;
+        let time = time.delta().as_secs_f32();
+        let wp = player.weapon.as_mut().unwrap();
+        wp.update_attack( time );
+        if firing && wp.attack() {
+            let window = window.single();
+            let (camera, cam_transform) = camera.single();
+
+            let mouse_world = window.cursor_position()
+            .and_then( |pos| camera.viewport_to_world_2d(cam_transform, pos ));
+
+            if mouse_world.is_some() {
+                let dir = (mouse_world.unwrap() - transform.translation.xy()).normalize_or_zero();
+                let dir_rot = Quat::from_rotation_arc(Vec3::Y, dir.extend(0.));
+                commands.spawn( (
+                    SpriteBundle {
+                        transform: transform.with_rotation(dir_rot),
+                        texture: projectile_asset.handle.clone(),
+                        ..default()
+                    },
+                    Projectile {
+                        damage: wp.damage,
+                        velocity: dir,
+                        speed: 1.,
+                    }
+                ));
+            }
         }
     }
+
 }
 
 fn update_player_transform(

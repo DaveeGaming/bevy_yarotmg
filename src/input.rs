@@ -1,12 +1,17 @@
 use bevy::prelude::*;
 use crate::player;
 
+
+/// Defined here to be able to change keybinds in runtime
 #[derive(Resource)]
 struct KeyBinds {
+    weapon_fire: KeyCode,
+
     key_up: KeyCode,
     key_right: KeyCode,
     key_left: KeyCode,
     key_down: KeyCode,
+
     camera_rot_left: KeyCode,
     camera_rot_right: KeyCode,
     camera_zoom_in: KeyCode,
@@ -19,10 +24,13 @@ impl Plugin for InputPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource( 
             KeyBinds {
+                weapon_fire: KeyCode::Space,
+
                 key_up: KeyCode::KeyW,            
                 key_left: KeyCode::KeyA,            
                 key_right: KeyCode::KeyS,            
                 key_down: KeyCode::KeyD,            
+
                 camera_rot_left: KeyCode::KeyQ,
                 camera_rot_right: KeyCode::KeyE,
                 camera_zoom_in: KeyCode::KeyO,
@@ -39,12 +47,20 @@ impl Plugin for InputPlugin {
 ) {
 } */
 
+/// Save player velocity so we can update in FixedUpdate
 fn input_manager(
     keybinds: Res<KeyBinds>,
     keyboard: Res<ButtonInput<KeyCode>>,
     mut player: Query<&mut player::Player>,
     mut cam: Query<&mut OrthographicProjection, With<Camera>>
 ) {
+    let player = player.get_single_mut();
+    if player.is_err() {
+        warn_once!("Player component not found in input_manager");
+        return;
+    }
+    let mut player = player.unwrap();
+
     let mut movement_vec = Vec2::default();
     let mut camera_mov = 0.;
     for key in keyboard.get_pressed() {
@@ -83,12 +99,10 @@ fn input_manager(
         }
     }
 
+    player.firing = keyboard.pressed(keybinds.weapon_fire);
+
     movement_vec = movement_vec.normalize_or_zero();
-    match player.get_single_mut() {
-        Ok(mut v) => { 
-            v.velocity = movement_vec;
-            v.camera_velocity = camera_mov;
-        },
-        Err(_) => warn_once!("Player component not found in input_manager"),
-    }
+
+    player.velocity = movement_vec;
+    player.camera_velocity = camera_mov;
 }

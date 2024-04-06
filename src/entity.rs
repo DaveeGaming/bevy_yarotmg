@@ -13,6 +13,7 @@ impl Plugin for EntityPlugin {
 #[derive(Component)]
 pub struct EntityRotate;
 
+/// Rotate every entity to the same orientation as the player
 fn update_entity_rotation(
     mut entities: Query<&mut Transform, (With<EntityRotate>, Without<Player>)>,
     player: Query<&mut Transform, With<Player>>
