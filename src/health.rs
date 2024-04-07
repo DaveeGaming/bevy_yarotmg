@@ -1,5 +1,3 @@
-use std::process::Child;
-
 use bevy::prelude::*;
 
 #[derive(Component)]
@@ -30,13 +28,15 @@ impl Plugin for HealthPlugin {
 
 fn create_health_text(
     mut commands: Commands,
-    mut health_event: Query<Entity, Added<Health>>   
+    mut health_event: Query<(Entity, &Handle<Image>), (Added<Health>, With<Sprite>)>   ,
+    assets: Res<Assets<Image>>
 ) {
-    for entity in health_event.iter_mut() {
+    for (entity, sprite) in health_event.iter_mut() {
+        let sprite_size = assets.get(sprite.id()).unwrap().size_f32();
         let text = commands.spawn( 
             Text2dBundle {
                 text: Text::from_section( "None", TextStyle { font_size: 10., ..default()}),
-                transform: Transform::from_translation( Vec3::new(0., -10., 0.)),
+                transform: Transform::from_translation( Vec3::new(0., -sprite_size.y, 0.)),
                 ..default()
             }
         ).id();

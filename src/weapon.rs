@@ -1,5 +1,3 @@
-use bevy::prelude::*;
-
 
 pub struct Weapon {
     pub damage: i32,
@@ -29,7 +27,7 @@ impl Default for Weapon {
     fn default() -> Self {
         Weapon {
             damage: 1,
-            attack_speed: 0.1,
+            attack_speed: 0.5,
 
             attack_timer: 0.
         }

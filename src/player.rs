@@ -1,5 +1,5 @@
-use bevy::{prelude::*, render::view::window, window::PrimaryWindow};
-use crate::{entity::EntityRotate, health::Health, projectile::{Projectile, ProjectileAsset}, weapon::Weapon};
+use bevy::{prelude::*, window::PrimaryWindow};
+use crate::{entity::EntityRotate, health::Health, projectile::{PPattern, Projectile, ProjectileAsset}, weapon::Weapon};
 pub struct PlayerPlugin;
 
 impl Plugin for PlayerPlugin {
@@ -81,7 +81,7 @@ fn update_weapon(
     projectile_asset: Res<ProjectileAsset>,
     mut player: Query<(&mut Player, &Transform)>,
 ) {
-    let mut p= player.get_single_mut();
+    let p = player.get_single_mut();
 
     if p.is_err() {
         warn_once!("Unable to find player in update_weapon");
@@ -111,11 +111,11 @@ fn update_weapon(
                         texture: projectile_asset.handle.clone(),
                         ..default()
                     },
-                    Projectile {
-                        damage: wp.damage,
-                        velocity: dir,
-                        speed: 1.,
-                    }
+                    Projectile::from_patterns( wp.damage,
+                         Vec::from( [
+                            PPattern{speed: Some(3.), angular_velocity: Some(0.), duration: 0.5},
+                            PPattern{speed: Some(1.), angular_velocity: Some(5.455), duration: 1.} 
+                        ]), true)
                 ));
             }
         }
