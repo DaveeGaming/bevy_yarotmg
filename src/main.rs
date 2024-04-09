@@ -16,6 +16,7 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
         .insert_resource(Msaa::Off)
+        .insert_resource(Time::from_hz(60.))
         .add_plugins(InputPlugin)
         .add_plugins(PlayerPlugin)
         .add_plugins(EntityPlugin)

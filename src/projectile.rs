@@ -4,12 +4,11 @@ use crate::{health::Health, player::Player};
 pub struct ProjectilePlugin;
 
 #[derive(Clone, Copy)]
-pub struct PPattern {
+pub struct PState {
     pub angular_velocity: Option<f32>,
     pub speed: Option<f32>,
     pub duration: f32,
 }
-
 
 #[derive(Component)]
 pub struct Projectile {
@@ -17,10 +16,10 @@ pub struct Projectile {
     pub angular_velocity: f32,
     pub speed: f32,
 
-    pub current_pattern: usize,
-    pub pattern_duration: f32,
-    pub patterns: Option<Vec<PPattern>>,
-    pub pattern_repeat: bool,
+    pub state_current: usize,
+    pub state_duration: f32,
+    pub states: Option<Vec<PState>>,
+    pub state_repeat: bool,
     
 }
 
@@ -31,26 +30,27 @@ impl Projectile {
             angular_velocity,
             speed,
 
-            current_pattern: 0,
-            patterns: None,
-            pattern_duration: 0., 
-            pattern_repeat: false,
+            state_current: 0,
+            states: None,
+            state_duration: 0., 
+            state_repeat: false,
         }
     }
 
-    pub fn from_patterns(damage: i32,patterns: Vec<PPattern>, pattern_repeat: bool) -> Projectile {
-        let first_pattern = patterns[0];
+    pub fn from_states(damage: i32,states: Vec<PState>, pattern_repeat: bool) -> Projectile {
+        let first_pattern = states[0];
         Projectile {
             damage,
             angular_velocity: first_pattern.angular_velocity.unwrap_or_default(),
             speed: first_pattern.speed.unwrap_or_default(),
 
-            current_pattern: 0,
-            patterns: Some(patterns.clone()),
-            pattern_duration: first_pattern.duration,
-            pattern_repeat
+            state_current: 0,
+            states: Some(states.clone()),
+            state_duration: first_pattern.duration,
+            state_repeat: pattern_repeat
         }
     }
+
 }
 
 #[derive(Resource)]
@@ -61,8 +61,8 @@ pub struct ProjectileAsset {
 impl Plugin for ProjectilePlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, setup);
-        app.add_systems(FixedUpdate, update_projectile_position);
-        app.add_systems(FixedUpdate, update_pattern);
+        app.add_systems(FixedUpdate, update_states);
+        app.add_systems(FixedUpdate, update_projectile_position.after( update_states ) );
         app.add_systems(FixedUpdate, update_bullet_collision);
     }
 }
@@ -77,51 +77,58 @@ fn setup(
     })
 }
 
-fn update_pattern (
+fn update_states (
     time: Res<Time>,
     mut projectiles: Query<&mut Projectile>,
 ) {
 
     for mut p in projectiles.iter_mut() {
 
-        if p.patterns.is_some() {
-            if p.pattern_duration < 0. {
-                let p_length = p.patterns.as_ref().unwrap().length();
-                if p.current_pattern + 1 < p_length {
+        if p.states.is_some() {
+            p.state_duration -= time.delta().as_secs_f32();
+            if p.state_duration < 0. {
+                let p_length = p.states.as_ref().unwrap().length();
+                if p.state_current + 1 < p_length {
 
-                    p.current_pattern += 1;
-                    let next_pattern =  p.patterns.as_ref().unwrap()[p.current_pattern];
-
-                    // Update projectile variables
-                    p.pattern_duration = next_pattern.duration;
-                    p.speed = next_pattern.speed.unwrap_or( p.speed );
-                    p.angular_velocity = next_pattern.angular_velocity.unwrap_or( p.angular_velocity );
-
-                } else if p.pattern_repeat && p.current_pattern + 1 == p_length {
-
-                    p.current_pattern = 0; 
-                    let next_pattern =  p.patterns.as_ref().unwrap()[p.current_pattern];
+                    p.state_current += 1;
+                    let next_state =  p.states.as_ref().unwrap()[p.state_current];
 
                     // Update projectile variables
-                    p.pattern_duration = next_pattern.duration;
-                    p.speed = next_pattern.speed.unwrap_or( p.speed );
-                    p.angular_velocity = next_pattern.angular_velocity.unwrap_or( p.angular_velocity );
+                    p.state_duration = next_state.duration;
+                    p.speed = next_state.speed.unwrap_or( p.speed );
+                    p.angular_velocity = next_state.angular_velocity.unwrap_or( p.angular_velocity );
+
+                } else if p.state_repeat && p.state_current + 1 == p_length {
+
+                    p.state_current = 0; 
+                    let next_state =  p.states.as_ref().unwrap()[p.state_current];
+
+                    // Update projectile variables
+                    p.state_duration = next_state.duration;
+                    p.speed = next_state.speed.unwrap_or( p.speed );
+                    p.angular_velocity = next_state.angular_velocity.unwrap_or( p.angular_velocity );
                 }
-            } else {
-                p.pattern_duration -= time.delta().as_secs_f32();
-            }
+            } 
         }
     }
 }
 
 fn update_projectile_position(
+    time: Res<Time>,
     mut projectiles: Query<(&mut Transform, &Projectile)>
 ) {
+    let time = time.delta().as_secs_f32();
+    let fm = 60.; 
+    let one_frame_offset = 1. / ((fm + 1.) / fm); //TODO: i hate this shit, i want to kms
     for (mut t, p) in projectiles.iter_mut() { 
-        let veloc = (Vec2::splat(p.speed) * Vec2::new(0., 1.)).extend(0.);
+        let veloc = p.speed * time * one_frame_offset;
         let rot = t.rotation;
-        t.translation += Quat::mul_vec3(rot, veloc);
-        t.rotate_z(p.angular_velocity.to_radians());
+        t.translation += Quat::mul_vec3(rot, Vec3::new(0., veloc, 0.));
+        if p.states.as_ref().is_some_and( |s| s[p.state_current].duration == 0.) {
+            t.rotate_z( ( p.angular_velocity).to_radians());
+        } else {
+            t.rotate_z( ( p.angular_velocity).to_radians() * time * one_frame_offset  );
+        }
     }
 }
 

@@ -16,7 +16,6 @@ impl Default for Health {
     }
 }
 
-
 pub struct HealthPlugin;
 
 impl Plugin for HealthPlugin {

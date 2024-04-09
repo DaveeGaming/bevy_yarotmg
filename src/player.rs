@@ -1,5 +1,5 @@
 use bevy::{prelude::*, window::PrimaryWindow};
-use crate::{entity::EntityRotate, health::Health, projectile::{PPattern, Projectile, ProjectileAsset}, weapon::Weapon};
+use crate::{entity::EntityRotate, health::Health, projectile::{PState, Projectile, ProjectileAsset}, weapon::Weapon};
 pub struct PlayerPlugin;
 
 impl Plugin for PlayerPlugin {
@@ -111,10 +111,10 @@ fn update_weapon(
                         texture: projectile_asset.handle.clone(),
                         ..default()
                     },
-                    Projectile::from_patterns( wp.damage,
+                    Projectile::from_states( wp.damage,
                          Vec::from( [
-                            PPattern{speed: Some(3.), angular_velocity: Some(0.), duration: 0.5},
-                            PPattern{speed: Some(1.), angular_velocity: Some(5.455), duration: 1.} 
+                            PState{speed: Some(10.), angular_velocity: Some(90.), duration: 1.},
+                            PState{speed: Some(10.), angular_velocity: Some(0.), duration: 1.},
                         ]), true)
                 ));
             }
