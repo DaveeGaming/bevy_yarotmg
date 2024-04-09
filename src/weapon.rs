@@ -1,4 +1,5 @@
-
+/// Generic weapon struct for the player to have \
+/// TODO: extract this more as a generic, and have implementations for different kinds of weapons?
 pub struct Weapon {
     pub damage: i32,
     pub attack_speed: f32,
@@ -7,14 +8,15 @@ pub struct Weapon {
 }
 
 impl Weapon {
-    pub fn update_attack(&mut self, delta: f32) {
+
+    pub fn increment_attack_timer(&mut self, delta: f32) {
         if self.attack_timer < self.attack_speed {
             self.attack_timer += delta;
         }
     }
 
-
-    pub fn attack(&mut self) -> bool {
+    /// Checks if our attack_timer reached the specified attack speed, if yes, it resets it.
+    pub fn can_attack(&mut self) -> bool {
         if self.attack_timer >= self.attack_speed {
             self.attack_timer -= self.attack_speed;
             return true;

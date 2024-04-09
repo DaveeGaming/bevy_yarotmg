@@ -53,6 +53,7 @@ impl Projectile {
 
 }
 
+/// Stores the handle given by asset_server, so we dont load the image in for every projectile
 #[derive(Resource)]
 pub struct ProjectileAsset {
     pub handle: Handle<Image>,
@@ -77,6 +78,9 @@ fn setup(
     })
 }
 
+
+/// Decrements state_duration, and if it reaches zero,  
+/// sets the projectile values to the values specified in the next state
 fn update_states (
     time: Res<Time>,
     mut projectiles: Query<&mut Projectile>,
@@ -113,18 +117,23 @@ fn update_states (
     }
 }
 
+/// Updates the transform of every projectile, by what their Projectile struct defines
 fn update_projectile_position(
     time: Res<Time>,
     mut projectiles: Query<(&mut Transform, &Projectile)>
 ) {
     let time = time.delta().as_secs_f32();
     let fm = 60.; 
-    let one_frame_offset = 1. / ((fm + 1.) / fm); //TODO: i hate this shit, i want to kms
+    let one_frame_offset = 1. / ((fm + 1.) / fm); //FIXME: i hate this shit, i want to kms
     for (mut t, p) in projectiles.iter_mut() { 
         let veloc = p.speed * time * one_frame_offset;
         let rot = t.rotation;
+        // Quat::mul_vec3 multiplies the vector by a rotation, this way our velocity vector points
+        // to where our sprite is pointing to
         t.translation += Quat::mul_vec3(rot, Vec3::new(0., veloc, 0.));
         if p.states.as_ref().is_some_and( |s| s[p.state_current].duration == 0.) {
+            // If the pattern has a duration of zero, we want it to be instant, and not affected
+            // by the delta_time
             t.rotate_z( ( p.angular_velocity).to_radians());
         } else {
             t.rotate_z( ( p.angular_velocity).to_radians() * time * one_frame_offset  );
@@ -132,12 +141,17 @@ fn update_projectile_position(
     }
 }
 
+//TODO: fix :3
 fn update_bullet_collision(
     mut entities: Query<(&Transform, &mut Health, &Handle<Image>), (Without<Player>,With<Sprite>)>,
     mut projectiles: Query<(Entity, &Transform, &Projectile, &Handle<Image>), With<Sprite>>,
     mut commands: Commands,
     assets: Res<Assets<Image>>
 ) {
+
+    // Currently loops through every entity, gets their sprite image handle
+    // gets the image size, and uses the built in aabb2d struct for collision checking
+    // the aabb2d struct requires a top left and bottom right corner
     for (p_entity, p_transform, p_data, p_sprite) in projectiles.iter_mut() {
         let p_sprite_size = assets.get(p_sprite).unwrap().size_f32(); 
         let p_next_position = p_transform.translation.xy(); // + (p_data.velocity * Vec2::splat(p_data.speed));

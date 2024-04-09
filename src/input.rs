@@ -3,6 +3,7 @@ use crate::player;
 
 
 /// Defined here to be able to change keybinds in runtime
+/// TODO: Make keybinds be able to set to any mouse or gamepad button, we could make a struct that stores all 3 for every key
 #[derive(Resource)]
 struct KeyBinds {
     weapon_fire: KeyCode,
@@ -41,19 +42,18 @@ impl Plugin for InputPlugin {
     }
 }
 
-
-/* fn setup(
-    mut commands: Commands,
-) {
-} */
-
-/// Save player velocity so we can update in FixedUpdate
+/// The big reason for having this input manager separately, is so we can save our keypresses \
+/// to variables, and update our player and camera in a FixedUpdate loop 
+/// 
+/// TODO: If this runs before a fixed update, it could eat an input, check the system run order between fixedupdate and normal update
 fn input_manager(
     keybinds: Res<KeyBinds>,
     keyboard: Res<ButtonInput<KeyCode>>,
     mut player: Query<&mut player::Player>,
     mut cam: Query<&mut OrthographicProjection, With<Camera>>
 ) {
+
+    // Errors if we have zero or multiple player components
     let player = player.get_single_mut();
     if player.is_err() {
         warn_once!("Player component not found in input_manager");
@@ -85,6 +85,8 @@ fn input_manager(
     }
 
     for key in keyboard.get_just_pressed() {
+        // We can manipulate the camera zoom outside the fixed loop because we 
+        // increment by set numbers, and only on keyinputs
         if let Ok(mut cam_p) = cam.get_single_mut() {
             if *key == keybinds.camera_zoom_in {
                 cam_p.scale -= 0.05;
@@ -99,10 +101,11 @@ fn input_manager(
         }
     }
 
-    player.firing = keyboard.pressed(keybinds.weapon_fire);
 
     movement_vec = movement_vec.normalize_or_zero();
 
+    // Update player component with input values
+    player.firing = keyboard.pressed(keybinds.weapon_fire);
     player.velocity = movement_vec;
     player.camera_velocity = camera_mov;
 }

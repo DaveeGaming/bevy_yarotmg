@@ -15,12 +15,13 @@ impl Plugin for PlayerPlugin {
 #[derive(Component)]
 pub struct Player {
     pub weapon: Option<Weapon>,
-    pub firing: bool,
 
+    // All set by the input system
+    pub firing: bool,
     pub velocity: Vec2,
     pub movement_speed: f32,
-
     pub camera_velocity: f32,
+
     pub camera_rot_speed: f32,
 }
 
@@ -39,6 +40,7 @@ impl Default for Player {
     }
 }
 
+/// This is where we currently spawn the camera, player, and the other health entities
 fn setup(
     mut commands: Commands,
     asset_server: Res<AssetServer> 
@@ -83,28 +85,38 @@ fn update_weapon(
 ) {
     let p = player.get_single_mut();
 
+    // Errors out if we have zero, or multiple player components
     if p.is_err() {
         warn_once!("Unable to find player in update_weapon");
         return;
     }
 
     let (mut player, transform) = p.unwrap();
-    
+
+    // The reason I implemented weapon this way, is I want the weapon cooldown to decrement
+    // always, even when we aren't shooting
     if player.weapon.is_some() {
+        // cache out the firing, because we request weapon as mutable later
         let firing = player.firing;
         let time = time.delta().as_secs_f32();
         let wp = player.weapon.as_mut().unwrap();
-        wp.update_attack( time );
-        if firing && wp.attack() {
-            let window = window.single();
-            let (camera, cam_transform) = camera.single();
 
+        wp.increment_attack_timer( time );
+
+        // * firing - updated from attack system
+        if firing && wp.can_attack() {
+            let window = window.single(); // Main window, we only have a single one
+           let (camera, cam_transform) = camera.single();
+
+            // Turn our cursor position into a point in the world
             let mouse_world = window.cursor_position()
             .and_then( |pos| camera.viewport_to_world_2d(cam_transform, pos ));
 
+            // mouse_world is none if our mouse is outside the window
             if mouse_world.is_some() {
+                // Get vector pointing in the direction of the mouse from the player
                 let dir = (mouse_world.unwrap() - transform.translation.xy()).normalize_or_zero();
-                let dir_rot = Quat::from_rotation_arc(Vec3::Y, dir.extend(0.));
+                let dir_rot = Quat::from_rotation_arc(Vec3::Y, dir.extend(0.)); // makes a quat from a vec
                 commands.spawn( (
                     SpriteBundle {
                         transform: transform.with_rotation(dir_rot),
@@ -126,6 +138,7 @@ fn update_weapon(
 fn update_player_transform(
     mut player: Query<(&mut Transform, &Player)>,
 ) {
+    // Errors if we have zero or multiple players
     match player.get_single_mut() {
         Ok( (mut transform, player) ) => {
             // As we are rotating the player, our "UP" direction changes, we should reflect that in our movement
@@ -138,13 +151,14 @@ fn update_player_transform(
 }
 
 fn update_player_camera(
-    mut player: Query< (&Player, &mut Transform )>,
+    mut player: Query<(&mut Transform, &Player)>,
 ) {
 
-    if let Ok(  (player, mut p_trans) ) = player.get_single_mut()  {
-        p_trans.rotate_z( player.camera_velocity * player.camera_rot_speed );
-
-    } else {
-        warn_once!("Player component not found in player_camera");
+    // Errors if we have zero or multiple players
+    match player.get_single_mut() {
+        Ok( (mut transform, player) ) => {
+            transform.rotate_z( player.camera_velocity * player.camera_rot_speed );
+        },
+        Err(_) => warn_once!("No Player found for update_player_transform"),
     }
 }
