@@ -1,5 +1,13 @@
 use bevy::{prelude::*, window::PrimaryWindow};
-use crate::{entity::EntityRotate, health::Health, projectile::{PState, Projectile, ProjectileAsset}, weapon::Weapon};
+use bevy_rapier2d::{prelude::*, rapier::dynamics::RigidBodyType};
+use crate::{
+    entity::EntityRotate, 
+    health::Health,
+    projectile::{ProjectileAsset, ProjectileTargetingType},
+    projectilepattern::{CirclePattern, IPPattern},
+    weapon::Weapon,
+};
+
 pub struct PlayerPlugin;
 
 impl Plugin for PlayerPlugin {
@@ -40,7 +48,8 @@ impl Default for Player {
     }
 }
 
-/// This is where we currently spawn the camera, player, and the other health entities
+/// This is where we currently spawn the camera, player, 
+/// and the other health entities
 fn setup(
     mut commands: Commands,
     asset_server: Res<AssetServer> 
@@ -59,16 +68,25 @@ fn setup(
         ..default()},
         Player::default(),
         Health::default(),
+        RigidBody::KinematicPositionBased,
+        ActiveCollisionTypes::all(),
+        Collider::cuboid(2., 2.)
     )).id();
 
     commands.entity(player_id).add_child(cam_id);
     commands.spawn( ( 
         SpriteBundle { texture: char.clone(), ..default()},
         Health::default(),
-        EntityRotate
+        EntityRotate,
+        RigidBody::KinematicPositionBased,
+        ActiveCollisionTypes::all(),
+        Collider::cuboid(5., 5.)
     ));
     commands.spawn( ( 
-        SpriteBundle { texture: char, transform: Transform::from_translation(Vec3::new(20., 20., 0.)), ..default()},
+        SpriteBundle { 
+            texture: char,
+            transform: Transform::from_translation(Vec3::new(20., 20., 0.)),
+            ..default()},
         Health::default(),
         EntityRotate
     ));
@@ -77,7 +95,7 @@ fn setup(
 
 fn update_weapon(
     time: Res<Time>,
-    mut commands: Commands,
+    commands: Commands,
     window: Query<&Window, With<PrimaryWindow>>,
     camera: Query< (&Camera, &GlobalTransform)>,
     projectile_asset: Res<ProjectileAsset>,
@@ -93,8 +111,9 @@ fn update_weapon(
 
     let (mut player, transform) = p.unwrap();
 
-    // The reason I implemented weapon this way, is I want the weapon cooldown to decrement
-    // always, even when we aren't shooting
+    // The reason I implemented weapon this way, 
+    // is i want the weapon cooldown to decrement
+    // constantly, even when we aren't shooting
     if player.weapon.is_some() {
         // cache out the firing, because we request weapon as mutable later
         let firing = player.firing;
@@ -105,8 +124,9 @@ fn update_weapon(
 
         // * firing - updated from attack system
         if firing && wp.can_attack() {
-            let window = window.single(); // Main window, we only have a single one
-           let (camera, cam_transform) = camera.single();
+            // Main window, we only have a single one
+            let window = window.single(); 
+            let (camera, cam_transform) = camera.single();
 
             // Turn our cursor position into a point in the world
             let mouse_world = window.cursor_position()
@@ -114,21 +134,20 @@ fn update_weapon(
 
             // mouse_world is none if our mouse is outside the window
             if mouse_world.is_some() {
-                // Get vector pointing in the direction of the mouse from the player
-                let dir = (mouse_world.unwrap() - transform.translation.xy()).normalize_or_zero();
-                let dir_rot = Quat::from_rotation_arc(Vec3::Y, dir.extend(0.)); // makes a quat from a vec
-                commands.spawn( (
-                    SpriteBundle {
-                        transform: transform.with_rotation(dir_rot),
-                        texture: projectile_asset.handle.clone(),
-                        ..default()
-                    },
-                    Projectile::from_states( wp.damage,
-                         Vec::from( [
-                            PState{speed: Some(10.), angular_velocity: Some(90.), duration: 1.},
-                            PState{speed: Some(10.), angular_velocity: Some(0.), duration: 1.},
-                        ]), true)
-                ));
+                // Get vector pointing in the direction of the 
+                // mouse from the player
+                let dir = (mouse_world.unwrap() - transform.translation.xy())
+                    .normalize_or_zero();
+                
+                let mut pattern = CirclePattern {
+                    amount: 3,
+                    max_deg: 30.,
+                    dir,
+                    targeting: ProjectileTargetingType::PLAYER,
+                    ..default()
+                };
+                let handle = projectile_asset.handle.clone();
+                pattern.spawn(commands, transform, handle);
             }
         }
     }
@@ -141,8 +160,12 @@ fn update_player_transform(
     // Errors if we have zero or multiple players
     match player.get_single_mut() {
         Ok( (mut transform, player) ) => {
-            // As we are rotating the player, our "UP" direction changes, we should reflect that in our movement
-            let movement = (Vec2::splat(player.movement_speed) * player.velocity ).extend(0.);
+            // As we are rotating the player, 
+            // our "UP" direction changes, we should reflect that in our movement
+            let movement = 
+                (Vec2::splat(player.movement_speed) * player.velocity)
+                    .extend(0.);
+
             let rotation = transform.rotation;
             transform.translation += Quat::mul_vec3(rotation, movement); 
         },

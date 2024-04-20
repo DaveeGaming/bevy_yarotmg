@@ -1,5 +1,8 @@
-use bevy::{math::bounding::{Aabb2d, IntersectsVolume}, prelude::*, render::render_resource::encase::rts_array::Length};
-use crate::{health::Health, player::Player};
+use std::borrow::BorrowMut;
+
+use bevy::{math::bounding::{Aabb2d, BoundingVolume, IntersectsVolume}, prelude::*, render::render_resource::encase::rts_array::Length};
+use bevy_rapier2d::{geometry::Collider, pipeline::{CollisionEvent, QueryFilter}, plugin::RapierContext, rapier::geometry::CollisionEventFlags};
+use crate::{health::{self, Health}, player::Player};
 
 pub struct ProjectilePlugin;
 
@@ -10,9 +13,21 @@ pub struct PState {
     pub duration: f32,
 }
 
+#[derive(Clone, Copy)]
+pub enum ProjectileTargetingType {
+    /// Damages enemies
+    PLAYER,
+    /// Damages player
+    ENEMY,
+    /// Damages both player and enemies
+    ENVIRONMENT
+}
+
+
 #[derive(Component)]
 pub struct Projectile {
     pub damage: i32,
+    pub targeting_type: ProjectileTargetingType,
     pub angular_velocity: f32,
     pub speed: f32,
 
@@ -23,12 +38,30 @@ pub struct Projectile {
     
 }
 
+
+impl Default for Projectile {
+    fn default() -> Self {
+        Projectile {
+            damage: 1,
+            angular_velocity: 0.,
+            speed: 15.,
+            targeting_type: ProjectileTargetingType::ENVIRONMENT,
+
+            state_current: 0,
+            states: None,
+            state_duration: 0., 
+            state_repeat: false,
+        }
+    }
+}
+
 impl Projectile {
-    pub fn new(damage: i32, angular_velocity: f32, speed: f32) -> Projectile{
+    pub fn new(damage: i32, angular_velocity: f32, speed: f32, targeting_type: ProjectileTargetingType) -> Projectile{
         Projectile {
             damage,
             angular_velocity,
             speed,
+            targeting_type,
 
             state_current: 0,
             states: None,
@@ -37,12 +70,13 @@ impl Projectile {
         }
     }
 
-    pub fn from_states(damage: i32,states: Vec<PState>, pattern_repeat: bool) -> Projectile {
+    pub fn from_states(damage: i32, targeting_type: ProjectileTargetingType, states: Vec<PState>, pattern_repeat: bool) -> Projectile {
         let first_pattern = states[0];
         Projectile {
             damage,
             angular_velocity: first_pattern.angular_velocity.unwrap_or_default(),
             speed: first_pattern.speed.unwrap_or_default(),
+            targeting_type,
 
             state_current: 0,
             states: Some(states.clone()),
@@ -64,7 +98,12 @@ impl Plugin for ProjectilePlugin {
         app.add_systems(Startup, setup);
         app.add_systems(FixedUpdate, update_states);
         app.add_systems(FixedUpdate, update_projectile_position.after( update_states ) );
-        app.add_systems(FixedUpdate, update_bullet_collision);
+        app.add_systems(PostUpdate, 
+            (
+                player_projectile_detection,
+                enemy_projectile_detection
+            ) 
+        );
     }
 }
 
@@ -143,35 +182,97 @@ fn update_projectile_position(
 
 //TODO: fix :3
 fn update_bullet_collision(
-    mut entities: Query<(&Transform, &mut Health, &Handle<Image>), (Without<Player>,With<Sprite>)>,
-    mut projectiles: Query<(Entity, &Transform, &Projectile, &Handle<Image>), With<Sprite>>,
+    mut entities: Query<(Entity, &mut Health), Without<Player>>,
+    mut projectiles: Query<(Entity, &Projectile)>,
+    mut collision_events: EventReader<CollisionEvent>,
     mut commands: Commands,
-    assets: Res<Assets<Image>>
 ) {
+    for event in collision_events.read() {
+        info!("Received collision event");
+        match event  {
+            CollisionEvent::Started(e1, e2, args) => {
+                if *args & CollisionEventFlags::SENSOR == CollisionEventFlags::SENSOR {
+                    if entities.get(*e1).is_ok() || projectiles.get(*e2).is_ok() {
+                        let (_, mut health) = entities.get_mut(*e1).unwrap();
+                        let (_, mut projectile) = projectiles.get(*e2).unwrap();
 
-    // Currently loops through every entity, gets their sprite image handle
-    // gets the image size, and uses the built in aabb2d struct for collision checking
-    // the aabb2d struct requires a top left and bottom right corner
-    for (p_entity, p_transform, p_data, p_sprite) in projectiles.iter_mut() {
-        let p_sprite_size = assets.get(p_sprite).unwrap().size_f32(); 
-        let p_next_position = p_transform.translation.xy(); // + (p_data.velocity * Vec2::splat(p_data.speed));
+                        health.current -= projectile.damage;
+                        commands.entity(*e2).despawn();
+                    }
 
-        let projectile_aabb = Aabb2d {
-            min: p_next_position,
-            max: p_next_position + p_sprite_size, 
-        };
+                    if entities.get(*e2).is_ok() || projectiles.get(*e1).is_ok() {
+                        let (_, mut projectile) = projectiles.get(*e1).unwrap();
+                        let (_, mut health) = entities.get_mut(*e2).unwrap();
 
-        for (e_transform,mut e_health, e_sprite) in entities.iter_mut() {
-            let e_sprite_size = assets.get(e_sprite).unwrap().size_f32(); 
-            let e_aabb = Aabb2d {
-                min: e_transform.translation.xy(),
-                max: e_transform.translation.xy() + e_sprite_size
-            };
+                        health.current -= projectile.damage;
+                        commands.entity(*e1).despawn();
+                    }
 
-            if projectile_aabb.intersects(&e_aabb) {
-                e_health.current -= p_data.damage;
-                commands.entity(p_entity).despawn();
+                    info!("Collision occured");
+                }
+                info!("Your if is fucked");
             }
+            _ => (),
         }
     }
+}
+
+fn enemy_projectile_detection(
+    mut entities: Query<(Entity, &Collider, &Transform, &mut Health), (Without<Player>, Without<Projectile>)>,
+    mut projectiles: Query<(Entity, &Projectile)>,
+    mut commands: Commands,
+    rapier_ctx: Res<RapierContext>,
+) {
+    for (e, coll, transform, mut health) in entities.iter_mut() {
+        rapier_ctx.intersections_with_shape(
+            transform.translation.xy(), //pos
+            transform.rotation.to_euler(EulerRot::XYZ).2, //rot
+            coll, //shape
+            QueryFilter::default(), 
+            |entity| {
+                let p_e = projectiles.get(entity);
+                if p_e.is_ok() {
+                    let (id, projectile) = p_e.unwrap();
+                    match projectile.targeting_type {
+                        ProjectileTargetingType::ENVIRONMENT | ProjectileTargetingType::PLAYER => {
+                            health.current -= projectile.damage;
+                            commands.entity(id).despawn();
+                        }
+                        _ => ()
+                    }
+                }
+                true
+            }
+        )
+    }
+}
+
+fn player_projectile_detection(
+    mut player: Query<(Entity, &Collider, &Transform, &mut Health), With<Player>>, 
+    mut projectiles: Query<(Entity, &Projectile)>,
+    mut commands: Commands,
+    rapier_ctx: Res<RapierContext>,
+) {
+    let (e, coll, transform, mut health) = player.get_single_mut().expect("Player not found");
+
+    rapier_ctx.intersections_with_shape(
+        transform.translation.xy(), //pos
+        transform.rotation.to_euler(EulerRot::XYZ).2, //rot
+        coll, //shape
+        QueryFilter::default(), 
+        |entity| {
+            let p_e = projectiles.get(entity);
+            if p_e.is_ok() {
+                let (id, projectile) = p_e.unwrap();
+                match projectile.targeting_type {
+                    ProjectileTargetingType::ENVIRONMENT | ProjectileTargetingType::ENEMY => {
+                        health.current -= projectile.damage;
+                        commands.entity(id).despawn();
+                    }
+                    _ => ()
+                }
+            }
+            true
+        }
+    )
 }
