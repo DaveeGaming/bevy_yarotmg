@@ -1,8 +1,10 @@
-use std::borrow::BorrowMut;
-
-use bevy::{math::bounding::{Aabb2d, BoundingVolume, IntersectsVolume}, prelude::*, render::render_resource::encase::rts_array::Length};
-use bevy_rapier2d::{geometry::Collider, pipeline::{CollisionEvent, QueryFilter}, plugin::RapierContext, rapier::geometry::CollisionEventFlags};
-use crate::{health::{self, Health}, player::Player};
+use bevy::prelude::*;
+use bevy_rapier2d::{geometry::Collider, pipeline::QueryFilter, plugin::RapierContext};
+use crate::{
+    health::Health, 
+    player::Player, 
+    states::{State, StateDuration, StateRepeat, Stateful}
+};
 
 pub struct ProjectilePlugin;
 
@@ -10,7 +12,13 @@ pub struct ProjectilePlugin;
 pub struct PState {
     pub angular_velocity: Option<f32>,
     pub speed: Option<f32>,
-    pub duration: f32,
+    pub duration: StateDuration,
+}
+
+impl State for PState {
+    fn get_duration(&self) -> StateDuration {
+        self.duration
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -31,11 +39,12 @@ pub struct Projectile {
     pub angular_velocity: f32,
     pub speed: f32,
 
-    pub state_current: usize,
-    pub state_duration: f32,
-    pub states: Option<Vec<PState>>,
-    pub state_repeat: bool,
-    
+    pub stateful: Option<Stateful<PState>>,
+
+    // pub state_current: usize,
+    // pub state_duration: f32,
+    // pub states: Option<Vec<PState>>,
+    // pub state_repeat: bool,
 }
 
 
@@ -47,41 +56,30 @@ impl Default for Projectile {
             speed: 15.,
             targeting_type: ProjectileTargetingType::ENVIRONMENT,
 
-            state_current: 0,
-            states: None,
-            state_duration: 0., 
-            state_repeat: false,
+            stateful: None,
+            // state_current: 0,
+            // states: None,
+            // state_duration: 0., 
+            // state_repeat: false,
         }
     }
 }
 
 impl Projectile {
-    pub fn new(damage: i32, angular_velocity: f32, speed: f32, targeting_type: ProjectileTargetingType) -> Projectile{
-        Projectile {
-            damage,
-            angular_velocity,
-            speed,
-            targeting_type,
-
-            state_current: 0,
-            states: None,
-            state_duration: 0., 
-            state_repeat: false,
-        }
-    }
-
-    pub fn from_states(damage: i32, targeting_type: ProjectileTargetingType, states: Vec<PState>, pattern_repeat: bool) -> Projectile {
-        let first_pattern = states[0];
+    pub fn from_states(damage: i32, targeting_type: ProjectileTargetingType, states: Vec<PState>, state_repeat: StateRepeat) -> Projectile {
+        let first_pattern = &states[0];
         Projectile {
             damage,
             angular_velocity: first_pattern.angular_velocity.unwrap_or_default(),
             speed: first_pattern.speed.unwrap_or_default(),
             targeting_type,
 
-            state_current: 0,
-            states: Some(states.clone()),
-            state_duration: first_pattern.duration,
-            state_repeat: pattern_repeat
+            stateful: Some( Stateful::from_states(states, state_repeat))
+
+            // state_current: 0,
+            // states: Some(states.clone()),
+            // state_duration: first_pattern.duration,
+            // state_repeat: pattern_repeat
         }
     }
 
@@ -100,6 +98,7 @@ impl Plugin for ProjectilePlugin {
         app.add_systems(FixedUpdate, update_projectile_position.after( update_states ) );
         app.add_systems(PostUpdate, 
             (
+                // update_bullet_collision, // It works, i will keep it for an example
                 player_projectile_detection,
                 enemy_projectile_detection
             ) 
@@ -117,41 +116,24 @@ fn setup(
     })
 }
 
-
-/// Decrements state_duration, and if it reaches zero,  
-/// sets the projectile values to the values specified in the next state
 fn update_states (
     time: Res<Time>,
     mut projectiles: Query<&mut Projectile>,
-) {
-
+) { 
     for mut p in projectiles.iter_mut() {
 
-        if p.states.is_some() {
-            p.state_duration -= time.delta().as_secs_f32();
-            if p.state_duration < 0. {
-                let p_length = p.states.as_ref().unwrap().length();
-                if p.state_current + 1 < p_length {
+        if p.stateful.is_none() { return; }
 
-                    p.state_current += 1;
-                    let next_state =  p.states.as_ref().unwrap()[p.state_current];
+        let stateful = p.stateful.as_mut().unwrap();
+        stateful.update_state(time.delta_seconds());
 
-                    // Update projectile variables
-                    p.state_duration = next_state.duration;
-                    p.speed = next_state.speed.unwrap_or( p.speed );
-                    p.angular_velocity = next_state.angular_velocity.unwrap_or( p.angular_velocity );
+        if stateful.state_changed() {
+            let next = stateful.get_current_state();
+            let next_speed = next.speed;
+            let next_angular = next.angular_velocity;
 
-                } else if p.state_repeat && p.state_current + 1 == p_length {
-
-                    p.state_current = 0; 
-                    let next_state =  p.states.as_ref().unwrap()[p.state_current];
-
-                    // Update projectile variables
-                    p.state_duration = next_state.duration;
-                    p.speed = next_state.speed.unwrap_or( p.speed );
-                    p.angular_velocity = next_state.angular_velocity.unwrap_or( p.angular_velocity );
-                }
-            } 
+            p.speed = next_speed.unwrap_or( p.speed );
+            p.angular_velocity = next_angular.unwrap_or( p.angular_velocity );
         }
     }
 }
@@ -170,7 +152,7 @@ fn update_projectile_position(
         // Quat::mul_vec3 multiplies the vector by a rotation, this way our velocity vector points
         // to where our sprite is pointing to
         t.translation += Quat::mul_vec3(rot, Vec3::new(0., veloc, 0.));
-        if p.states.as_ref().is_some_and( |s| s[p.state_current].duration == 0.) {
+        if p.stateful.as_ref().is_some_and( |s| s.state_duration == StateDuration::Instant ) {
             // If the pattern has a duration of zero, we want it to be instant, and not affected
             // by the delta_time
             t.rotate_z( ( p.angular_velocity).to_radians());
@@ -180,55 +162,61 @@ fn update_projectile_position(
     }
 }
 
-//TODO: fix :3
-fn update_bullet_collision(
-    mut entities: Query<(Entity, &mut Health), Without<Player>>,
-    mut projectiles: Query<(Entity, &Projectile)>,
-    mut collision_events: EventReader<CollisionEvent>,
-    mut commands: Commands,
-) {
-    for event in collision_events.read() {
-        info!("Received collision event");
-        match event  {
-            CollisionEvent::Started(e1, e2, args) => {
-                if *args & CollisionEventFlags::SENSOR == CollisionEventFlags::SENSOR {
-                    if entities.get(*e1).is_ok() || projectiles.get(*e2).is_ok() {
-                        let (_, mut health) = entities.get_mut(*e1).unwrap();
-                        let (_, mut projectile) = projectiles.get(*e2).unwrap();
 
-                        health.current -= projectile.damage;
-                        commands.entity(*e2).despawn();
-                    }
+// SOME BIG INFO:
 
-                    if entities.get(*e2).is_ok() || projectiles.get(*e1).is_ok() {
-                        let (_, mut projectile) = projectiles.get(*e1).unwrap();
-                        let (_, mut health) = entities.get_mut(*e2).unwrap();
+// Only gets called if entities have the ActiveEvents::COLLIDE_EVENTS flag
+// And dont forget to set the ActiveCollisionType flags, if its two kinematic
+// bodies.
 
-                        health.current -= projectile.damage;
-                        commands.entity(*e1).despawn();
-                    }
+// Leaving this here for learning and keepsake purposes
 
-                    info!("Collision occured");
-                }
-                info!("Your if is fucked");
-            }
-            _ => (),
-        }
-    }
-}
+// fn update_bullet_collision(
+//     mut entities: Query<(Entity, &mut Health), Without<Player>>,
+//     mut projectiles: Query<(Entity, &Projectile)>,
+//     mut collision_events: EventReader<CollisionEvent>,
+//     mut commands: Commands,
+// ) {
+//     for event in collision_events.read() {
+//         match event  {
+//             CollisionEvent::Started(e1, e2, args) => {
+//                 if args.intersects( CollisionEventFlags::SENSOR )  {
+//                     if entities.get(*e1).is_ok() && projectiles.get(*e2).is_ok() {
+//                         let (_, mut health) = entities.get_mut(*e1).unwrap();
+//                         let (_, mut projectile) = projectiles.get(*e2).unwrap();
 
+//                         health.current -= projectile.damage;
+//                         commands.entity(*e2).despawn();
+//                     }
+
+//                     if entities.get(*e2).is_ok() && projectiles.get(*e1).is_ok() {
+//                         let (_, mut projectile) = projectiles.get(*e1).unwrap();
+//                         let (_, mut health) = entities.get_mut(*e2).unwrap();
+
+//                         health.current -= projectile.damage;
+//                         commands.entity(*e1).despawn();
+//                     }
+//                 }
+//             }
+//             _ => (),
+//         }
+//     }
+// }
+
+
+//TODO: Make a separate enemy and enviroment struct
 fn enemy_projectile_detection(
     mut entities: Query<(Entity, &Collider, &Transform, &mut Health), (Without<Player>, Without<Projectile>)>,
-    mut projectiles: Query<(Entity, &Projectile)>,
+    projectiles: Query<(Entity, &Projectile)>,
     mut commands: Commands,
     rapier_ctx: Res<RapierContext>,
 ) {
-    for (e, coll, transform, mut health) in entities.iter_mut() {
+    for (_, coll, transform, mut health) in entities.iter_mut() {
         rapier_ctx.intersections_with_shape(
             transform.translation.xy(), //pos
             transform.rotation.to_euler(EulerRot::XYZ).2, //rot
             coll, //shape
-            QueryFilter::default(), 
+            QueryFilter::default(),  // TODO: Figure out how to narrow down the query
             |entity| {
                 let p_e = projectiles.get(entity);
                 if p_e.is_ok() {
@@ -249,11 +237,11 @@ fn enemy_projectile_detection(
 
 fn player_projectile_detection(
     mut player: Query<(Entity, &Collider, &Transform, &mut Health), With<Player>>, 
-    mut projectiles: Query<(Entity, &Projectile)>,
+    projectiles: Query<(Entity, &Projectile)>,
     mut commands: Commands,
     rapier_ctx: Res<RapierContext>,
 ) {
-    let (e, coll, transform, mut health) = player.get_single_mut().expect("Player not found");
+    let (_, coll, transform, mut health) = player.get_single_mut().expect("Player not found");
 
     rapier_ctx.intersections_with_shape(
         transform.translation.xy(), //pos

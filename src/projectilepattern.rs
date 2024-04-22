@@ -1,6 +1,6 @@
 use bevy::{math::f32, prelude::*};
 
-use crate::projectile::{PState, Projectile, ProjectileTargetingType};
+use crate::{projectile::{PState, Projectile, ProjectileTargetingType}, states::{StateDuration, StateRepeat}};
 use bevy_rapier2d::prelude::*;
 
 /// Used for building custom bullet patterns, 
@@ -11,38 +11,10 @@ pub trait IPPattern {
         commands: Commands, 
         center: &Transform, 
         sprite: Handle<Image>);
-    fn update_state(&mut self);
 }
-
-#[derive(Component)]
-pub struct PPattern {
-    /// Stores the ID-s of every bullet entity
-    pub bullets: Vec<Entity>,
-    
-    //TODO: Make all state changes its own struct?
-    pub state_current: usize,
-    pub state_duration: f32,
-    pub states: Option<Vec<PState>>,
-    pub state_repeat: bool,
-}
-
-
-impl Default for PPattern {
-    fn default() -> Self {
-        PPattern {
-            bullets: Vec::new(),
-
-            state_current: 0,
-            state_duration: 0.,
-            states: None,
-            state_repeat: false
-        }
-    }
-}
-
 
 pub struct CirclePattern{
-    pub base: PPattern,
+    // pub stateful: PPattern,
     pub amount: i32,
     pub dir: Vec2,
     pub max_deg: f32,
@@ -53,8 +25,6 @@ pub struct CirclePattern{
 impl Default for CirclePattern {
     fn default() -> Self {
         CirclePattern {
-            base: PPattern::default(),
-
             amount: 0,
             max_deg: 360.,
             dir: Vec2::new(0.,1.),
@@ -94,27 +64,32 @@ impl IPPattern for CirclePattern {
         base_transform.rotate_z( -(deg / 2.).to_radians() );
 
         for _ in 1..=self.amount {
-            let id = commands.spawn(
+            let _ = commands.spawn(
                 (
                     SpriteBundle {
                         transform: base_transform, 
                         texture: sprite.clone(),
                         ..default()
                     },
-                    Projectile {
-                        targeting_type: self.targeting,
-                        ..default()
-                    },
+
+
+                    Projectile::from_states(1, 
+                        self.targeting, 
+                        vec![
+                            PState { speed: Some(12.),  angular_velocity: None,          duration: StateDuration::Fixed(2.)},
+                            PState { speed: None,       angular_velocity: Some(-120.),   duration: StateDuration::Fixed(1.)},
+                            PState { speed: None,       angular_velocity: Some(0.),      duration: StateDuration::Fixed(0.1)},
+                            PState { speed: None,       angular_velocity: Some(120.),    duration: StateDuration::Fixed(1.)},
+                            PState { speed: None,       angular_velocity: Some(0.),      duration: StateDuration::Fixed(0.1)},
+                        ], StateRepeat::FromIndex(1) ),
                     Collider::cuboid(1., 4.),
-                    RigidBody::KinematicPositionBased,
-                    ActiveCollisionTypes::all()          
                 )
             ).id();
 
             // Rotate after spawning first bullet
             base_transform.rotate_z( -deg.to_radians() );
 
-            self.base.bullets.push(id);
+            // self.base.bullets.push(id);
         }
 
         // One possible way of updating the bullets is to reconstruct the base
@@ -126,9 +101,5 @@ impl IPPattern for CirclePattern {
         //     let id = commands.spawn(self.base).id();
         //     self.base_id = Some(id);
         // }
-    }
-
-    fn update_state(&mut self) {
-        todo!()
     }
 }

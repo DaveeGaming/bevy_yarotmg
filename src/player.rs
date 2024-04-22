@@ -1,5 +1,5 @@
 use bevy::{prelude::*, window::PrimaryWindow};
-use bevy_rapier2d::{prelude::*, rapier::dynamics::RigidBodyType};
+use bevy_rapier2d::prelude::*;
 use crate::{
     entity::EntityRotate, 
     health::Health,
@@ -69,7 +69,6 @@ fn setup(
         Player::default(),
         Health::default(),
         RigidBody::KinematicPositionBased,
-        ActiveCollisionTypes::all(),
         Collider::cuboid(2., 2.)
     )).id();
 
@@ -79,7 +78,6 @@ fn setup(
         Health::default(),
         EntityRotate,
         RigidBody::KinematicPositionBased,
-        ActiveCollisionTypes::all(),
         Collider::cuboid(5., 5.)
     ));
     commands.spawn( ( 
@@ -140,8 +138,7 @@ fn update_weapon(
                     .normalize_or_zero();
                 
                 let mut pattern = CirclePattern {
-                    amount: 3,
-                    max_deg: 30.,
+                    amount: 10,
                     dir,
                     targeting: ProjectileTargetingType::PLAYER,
                     ..default()
