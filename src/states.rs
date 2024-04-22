@@ -1,13 +1,13 @@
 use bevy::prelude::*;
 
-pub struct StatefulPlugin;
+// pub struct StatefulPlugin;
 
 
-impl Plugin for StatefulPlugin {
-    fn build(&self, app: &mut App) {
+// impl Plugin for StatefulPlugin {
+//     fn build(&self, app: &mut App) {
 
-    }
-}
+//     }
+// }
 
 
 #[derive(Clone, Copy)]
@@ -30,12 +30,11 @@ pub enum StateDuration {
     Stretch(f32)
 }
 
-#[derive(Event)]
-pub struct StatefulEvent<T: State> ( StatefulEventFlags<T> );
 
-pub struct StatefulEventFlags<T: State> {
-    duration_type: StateDuration,
-    state: T,
+#[derive(Event)]
+pub struct StatefulEvent<T: State> {
+    pub entity_id: Entity,
+    pub state: T,
 }
 
 pub trait State: Copy {
@@ -48,19 +47,18 @@ pub struct Stateful<T: State>{
     pub state_duration: StateDuration,
     pub states: Vec<T>,
     pub state_repeat: StateRepeat,
-    pub last_state: usize,
 }
 
 impl<T: State> Default for Stateful<T> {
     fn default() -> Self {
         Stateful {
             state_current: 0,
-            last_state: 0,
             state_duration: StateDuration::Fixed(1.),
             states: Vec::new(),
             state_repeat: StateRepeat::None,
         }
     }
+
 }
 
 impl<T: State> Stateful<T> {
@@ -68,7 +66,6 @@ impl<T: State> Stateful<T> {
         let first_state = &states[0];
         Stateful {
             state_current: 0,
-            last_state: 0,
             state_duration: first_state.get_duration(),
             state_repeat,
             states,
@@ -106,17 +103,14 @@ impl<T: State> Stateful<T> {
         let state = self.states[ self.state_current ];
         self.state_duration = state.get_duration();                
 
-        return Some( StatefulEvent( 
-            StatefulEventFlags {
-                duration_type: state.get_duration(),
-                state: state
-            }
-        ));
+        return Some( StatefulEvent{ 
+            entity_id: Entity::PLACEHOLDER,
+            state: state
+        });
     }
 
 
     pub fn update_state(&mut self,time_delta: f32) -> Option<StatefulEvent<T>> {
-        self.last_state = self.state_current;
         match self.state_duration {
             StateDuration::Instant => {
                 return self.increment_state()
@@ -138,31 +132,5 @@ impl<T: State> Stateful<T> {
                 }
             }
         }
-
-        // let state_count = self.states.len();
-        // if self.state_duration <= 0. {         //     //TODO: flip if statement
-        //     if self.state_repeat && self.state_current + 1 == state_count {
-        //         // Back to the beginning
-        //         self.state_current = 0;
-        //         self.state_duration = self.states[self.state_current].get_duration();
-        //     } else if self.state_current + 1 == state_count {
-        //         // Not repeating, reached last, stop
-        //         return;
-        //     } else {
-        //         // Increment one
-        //         self.state_current += 1;
-        //         self.state_duration = self.states[self.state_current].get_duration();
-        //     }
-        // } else {
-        //     self.state_duration -= time_delta;
-        // }
-    }
-
-    pub fn get_current_state(&self) -> &T {
-        return &self.states[self.state_current];
-    }
-
-    pub fn state_changed(&self) -> bool {
-        return self.state_current != self.last_state;
     }
 }

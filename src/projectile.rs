@@ -3,7 +3,7 @@ use bevy_rapier2d::{geometry::Collider, pipeline::QueryFilter, plugin::RapierCon
 use crate::{
     health::Health, 
     player::Player, 
-    states::{State, StateDuration, StateRepeat, Stateful}
+    states::{State, StateDuration, Stateful, StatefulEvent}
 };
 
 pub struct ProjectilePlugin;
@@ -38,13 +38,6 @@ pub struct Projectile {
     pub targeting_type: ProjectileTargetingType,
     pub angular_velocity: f32,
     pub speed: f32,
-
-    pub stateful: Option<Stateful<PState>>,
-
-    // pub state_current: usize,
-    // pub state_duration: f32,
-    // pub states: Option<Vec<PState>>,
-    // pub state_repeat: bool,
 }
 
 
@@ -55,34 +48,8 @@ impl Default for Projectile {
             angular_velocity: 0.,
             speed: 15.,
             targeting_type: ProjectileTargetingType::ENVIRONMENT,
-
-            stateful: None,
-            // state_current: 0,
-            // states: None,
-            // state_duration: 0., 
-            // state_repeat: false,
         }
     }
-}
-
-impl Projectile {
-    pub fn from_states(damage: i32, targeting_type: ProjectileTargetingType, states: Vec<PState>, state_repeat: StateRepeat) -> Projectile {
-        let first_pattern = &states[0];
-        Projectile {
-            damage,
-            angular_velocity: first_pattern.angular_velocity.unwrap_or_default(),
-            speed: first_pattern.speed.unwrap_or_default(),
-            targeting_type,
-
-            stateful: Some( Stateful::from_states(states, state_repeat))
-
-            // state_current: 0,
-            // states: Some(states.clone()),
-            // state_duration: first_pattern.duration,
-            // state_repeat: pattern_repeat
-        }
-    }
-
 }
 
 /// Stores the handle given by asset_server, so we dont load the image in for every projectile
@@ -94,7 +61,9 @@ pub struct ProjectileAsset {
 impl Plugin for ProjectilePlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, setup);
-        app.add_systems(FixedUpdate, update_states);
+        app.add_event::<StatefulEvent<PState>>();
+        app.add_systems(FixedUpdate, increment_states);
+        app.add_systems(FixedUpdate, update_states.after( increment_states )  );
         app.add_systems(FixedUpdate, update_projectile_position.after( update_states ) );
         app.add_systems(PostUpdate, 
             (
@@ -116,24 +85,39 @@ fn setup(
     })
 }
 
-fn update_states (
+
+fn increment_states (
     time: Res<Time>,
-    mut projectiles: Query<&mut Projectile>,
+    mut state_event: EventWriter<StatefulEvent<PState>>,
+    mut projectiles: Query<(Entity, &mut Stateful<PState>), With<Projectile>>,
 ) { 
-    for mut p in projectiles.iter_mut() {
+    for (id, mut state) in projectiles.iter_mut() {
+        let event = state.update_state(time.delta_seconds());
+        
 
-        if p.stateful.is_none() { return; }
+        match event {
+            Some(mut e) => { 
+               e.entity_id = id; 
+               state_event.send(e);
+             },
+            _ => ()
+        }
+    }
+}
 
-        let stateful = p.stateful.as_mut().unwrap();
-        stateful.update_state(time.delta_seconds());
+fn update_states (
+    mut state_event: EventReader<StatefulEvent<PState>>,
+    mut projectiles: Query<&mut Projectile, With<Stateful<PState>>>,
+) { 
+    for event in state_event.read() {
+        let projectile = projectiles.get_mut( event.entity_id );
 
-        if stateful.state_changed() {
-            let next = stateful.get_current_state();
-            let next_speed = next.speed;
-            let next_angular = next.angular_velocity;
-
-            p.speed = next_speed.unwrap_or( p.speed );
-            p.angular_velocity = next_angular.unwrap_or( p.angular_velocity );
+        match projectile {
+            Ok( mut p ) => {
+               p.speed = event.state.speed.unwrap_or( p.speed );
+               p.angular_velocity = event.state.angular_velocity.unwrap_or( p.angular_velocity );
+            },
+            Err(err) => warn!("update_projectile_state lost entity from statefulevent, with error {}", err),
         }
     }
 }
@@ -141,18 +125,21 @@ fn update_states (
 /// Updates the transform of every projectile, by what their Projectile struct defines
 fn update_projectile_position(
     time: Res<Time>,
-    mut projectiles: Query<(&mut Transform, &Projectile)>
+    mut projectiles: Query<(Entity,&mut Transform, &Projectile)>,
+    state_projectiles: Query<&Stateful<PState>, With<Projectile>>
 ) {
     let time = time.delta().as_secs_f32();
     let fm = 60.; 
     let one_frame_offset = 1. / ((fm + 1.) / fm); //FIXME: i hate this shit, i want to kms
-    for (mut t, p) in projectiles.iter_mut() { 
+    for (e,mut t, p) in projectiles.iter_mut() { 
         let veloc = p.speed * time * one_frame_offset;
         let rot = t.rotation;
         // Quat::mul_vec3 multiplies the vector by a rotation, this way our velocity vector points
         // to where our sprite is pointing to
         t.translation += Quat::mul_vec3(rot, Vec3::new(0., veloc, 0.));
-        if p.stateful.as_ref().is_some_and( |s| s.state_duration == StateDuration::Instant ) {
+
+        //TODO: implement stateduration::stretch
+        if state_projectiles.get( e ).is_ok_and( |s| s.state_duration == StateDuration::Instant) {
             // If the pattern has a duration of zero, we want it to be instant, and not affected
             // by the delta_time
             t.rotate_z( ( p.angular_velocity).to_radians());

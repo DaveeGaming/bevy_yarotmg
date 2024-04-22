@@ -1,6 +1,6 @@
 use bevy::{math::f32, prelude::*};
 
-use crate::{projectile::{PState, Projectile, ProjectileTargetingType}, states::{StateDuration, StateRepeat}};
+use crate::{projectile::{PState, Projectile, ProjectileTargetingType}, states::{StateDuration, StateRepeat, Stateful}};
 use bevy_rapier2d::prelude::*;
 
 /// Used for building custom bullet patterns, 
@@ -71,10 +71,12 @@ impl IPPattern for CirclePattern {
                         texture: sprite.clone(),
                         ..default()
                     },
+                    Projectile {
+                        targeting_type: self.targeting,
+                        ..default()
+                    },
 
-
-                    Projectile::from_states(1, 
-                        self.targeting, 
+                    Stateful::from_states( 
                         vec![
                             PState { speed: Some(12.),  angular_velocity: None,          duration: StateDuration::Fixed(2.)},
                             PState { speed: None,       angular_velocity: Some(-120.),   duration: StateDuration::Fixed(1.)},
