@@ -16,7 +16,7 @@ pub enum StateRepeat {
     None,
     /// State repeats whole pattern.
     All,
-    /// When state repeats, jumps ahead to given index.
+    /// State repeats from the given index.
     FromIndex(usize)
 }
 #[derive(Clone, Copy, PartialEq)]
@@ -73,21 +73,12 @@ impl<T: State> Stateful<T> {
     }
 }
 
-// Currently either the whole thing is repeated, or none
-//TODO: Skip instant states?
-//TODO: Event callback on state change
-
 //Ideas: 
 // Have functions set the state, for example:
 //   -  Have the angular rotation be a sinus function
 //   -  The speed of a projectile gradually speed up
-//
-// Different duration types:
-//   -  Fixed: runs till it says
-//   -  Stretch: Complete the given angle/graph/whatever in the given time
 
 
-// TODO: move this whole shit into a system
 impl<T: State> Stateful<T> {
     fn increment_state(&mut self) -> Option<StatefulEvent<T>> {
         //TODO: This introduces a one frame delay in instant durations
