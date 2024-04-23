@@ -1,11 +1,7 @@
 use bevy::{prelude::*, window::PrimaryWindow};
 use bevy_rapier2d::prelude::*;
 use crate::{
-    entity::EntityRotate, 
-    health::Health,
-    projectile::{ProjectileAsset, ProjectileTargetingType},
-    projectilepattern::{CirclePattern, IPPattern},
-    weapon::Weapon,
+    entity::EntityRotate, health::Health, input::Keybinds, projectile::{ProjectileAsset, ProjectileTargetingType}, projectilepattern::{CirclePattern, IPPattern}, weapon::Weapon
 };
 
 pub struct PlayerPlugin;
@@ -14,8 +10,8 @@ impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, setup);
         app.add_systems(FixedUpdate, update_player_transform);
-        app.add_systems(FixedUpdate, update_player_camera);
-        app.add_systems(FixedUpdate, update_weapon);
+        app.add_systems(Update, update_player_camera);
+        app.add_systems(Update, update_weapon);
     }
 }
 
@@ -43,7 +39,7 @@ impl Default for Player {
             movement_speed: 2.,
 
             camera_velocity: 0.,
-            camera_rot_speed: 0.1,
+            camera_rot_speed: 3.,
         }
     }
 }
@@ -171,13 +167,20 @@ fn update_player_transform(
 }
 
 fn update_player_camera(
+    keybinds: Res<Keybinds>,
+    time: Res<Time>,
     mut player: Query<(&mut Transform, &Player)>,
 ) {
 
+    // FIXME: Camera jitters when reset
     // Errors if we have zero or multiple players
     match player.get_single_mut() {
         Ok( (mut transform, player) ) => {
-            transform.rotate_z( player.camera_velocity * player.camera_rot_speed );
+            transform.rotate_z( player.camera_velocity * player.camera_rot_speed * time.delta_seconds() );
+            if keybinds.camera_reset.active {
+                let current = transform.rotation.to_euler(EulerRot::XYZ);
+                transform.rotation = Quat::from_euler(EulerRot::XYZ, current.0, current.1, 0.);
+            }
         },
         Err(_) => warn_once!("No Player found for update_player_transform"),
     }

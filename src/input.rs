@@ -4,38 +4,112 @@ use crate::player;
 
 /// Defined here to be able to change keybinds in runtime
 /// TODO: Make keybinds be able to set to any mouse or gamepad button, we could make a struct that stores all 3 for every key
-#[derive(Resource)]
-struct KeyBinds {
-    weapon_fire: KeyCode,
 
-    key_up: KeyCode,
-    key_right: KeyCode,
-    key_left: KeyCode,
-    key_down: KeyCode,
-
-    camera_rot_left: KeyCode,
-    camera_rot_right: KeyCode,
-    camera_zoom_in: KeyCode,
-    camera_zoom_out: KeyCode,
+pub struct Key {
+    pub active: bool,
+    pub key: KeyType,
 }
+
+pub enum KeyType {
+    Keyboard(KeyCode),
+    Mouse(MouseButton),
+    Gamepad(GamepadButton)
+}
+
+pub struct InputSystem<'a> {
+    keyboard: Res<'a, ButtonInput<KeyCode>>,
+    mouse: Res<'a, ButtonInput<MouseButton>>,
+    gamepad: Res<'a, ButtonInput<GamepadButton>>,
+}
+
+impl Key {
+    pub fn keyboard(key: KeyCode) -> Self {
+        Key { active: false, key: KeyType::Keyboard(key) }
+    }
+    pub fn mouse(key: MouseButton) -> Self {
+        Key { active: false, key: KeyType::Mouse(key) }
+    }
+    pub fn gamepad(key: GamepadButton) -> Self {
+        Key { active: false, key: KeyType::Gamepad(key) }
+    }
+
+    pub fn pressed(&mut self,sys: &InputSystem) -> bool {
+        match self.key {
+            KeyType::Keyboard( key ) => { 
+                let i = sys.keyboard.pressed( key );
+                self.active = i;
+                return i;
+            },
+            KeyType::Mouse( key ) => { 
+                let i = sys.mouse.pressed( key );
+                self.active = i;
+                return i;
+            },
+            KeyType::Gamepad( key ) => { 
+                let i = sys.gamepad.pressed( key );
+                self.active = i;
+                return i;
+            },
+        }
+    }
+
+    pub fn just_pressed(&mut self,sys: &InputSystem) -> bool {
+        match self.key {
+            KeyType::Keyboard( key ) => { 
+                let i = sys.keyboard.just_pressed( key );
+                self.active = i;
+                return i;
+            },
+            KeyType::Mouse( key ) => { 
+                let i = sys.mouse.just_pressed( key );
+                self.active = i;
+                return i;
+            },
+            KeyType::Gamepad( key ) => { 
+                let i = sys.gamepad.just_pressed( key );
+                self.active = i;
+                return i;
+            },
+        }
+    }
+}
+
+
+#[derive(Resource)]
+pub struct Keybinds {
+    pub weapon_fire: Key,
+
+    pub key_up: Key,
+    pub key_right: Key,
+    pub key_left: Key,
+    pub key_down: Key,
+
+    pub camera_rot_left: Key,
+    pub camera_rot_right: Key,
+    pub camera_zoom_in: Key,
+    pub camera_zoom_out: Key,
+    pub camera_reset: Key,
+}
+
 
 pub struct InputPlugin;
 
 impl Plugin for InputPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource( 
-            KeyBinds {
-                weapon_fire: KeyCode::Space,
+            Keybinds {
+                weapon_fire: Key::mouse(MouseButton::Left),
 
-                key_up: KeyCode::KeyW,            
-                key_left: KeyCode::KeyA,            
-                key_right: KeyCode::KeyS,            
-                key_down: KeyCode::KeyD,            
+                key_up: Key::keyboard(KeyCode::KeyW),            
+                key_left: Key::keyboard(KeyCode::KeyA),            
+                key_right: Key::keyboard(KeyCode::KeyS),            
+                key_down: Key::keyboard(KeyCode::KeyD),            
 
-                camera_rot_left: KeyCode::KeyQ,
-                camera_rot_right: KeyCode::KeyE,
-                camera_zoom_in: KeyCode::KeyO,
-                camera_zoom_out: KeyCode::KeyP,
+                camera_rot_left: Key::keyboard(KeyCode::KeyQ),
+                camera_rot_right: Key::keyboard(KeyCode::KeyE),
+                camera_zoom_in: Key::keyboard(KeyCode::KeyO),
+                camera_zoom_out: Key::keyboard(KeyCode::KeyP),
+                camera_reset: Key::keyboard(KeyCode::KeyR),
             });
         // app.add_systems(Startup, setup);
         app.add_systems(Update, input_manager);
@@ -47,8 +121,10 @@ impl Plugin for InputPlugin {
 /// 
 /// TODO: If this runs before a fixed update, it could eat an input, check the system run order between fixedupdate and normal update
 fn input_manager(
-    keybinds: Res<KeyBinds>,
+    mut keybinds: ResMut<Keybinds>,
     keyboard: Res<ButtonInput<KeyCode>>,
+    mouse: Res<ButtonInput<MouseButton>>,
+    gamepad: Res<ButtonInput<GamepadButton>>,
     mut player: Query<&mut player::Player>,
     mut cam: Query<&mut OrthographicProjection, With<Camera>>
 ) {
@@ -61,51 +137,60 @@ fn input_manager(
     }
     let mut player = player.unwrap();
 
+    let system = InputSystem {
+        keyboard: keyboard,
+        mouse: mouse,
+        gamepad: gamepad,
+    };
+
     let mut movement_vec = Vec2::default();
     let mut camera_mov = 0.;
-    for key in keyboard.get_pressed() {
-        if *key == keybinds.key_up {
-           movement_vec.y = 1.; 
-        }
-        if *key == keybinds.key_left {
-           movement_vec.x = -1.; 
-        }
-        if *key == keybinds.key_right {
-           movement_vec.y = -1.; 
-        }
-        if *key == keybinds.key_down {
-           movement_vec.x = 1.; 
-        }
-        if *key == keybinds.camera_rot_left {
-            camera_mov = 1.;
-        }
-        if *key == keybinds.camera_rot_right {
-            camera_mov = -1.;
-        }
+    let mut camera_reset = false;
+
+    if keybinds.key_up.pressed( &system ) {
+        movement_vec.y = 1.; 
     }
 
-    for key in keyboard.get_just_pressed() {
-        // We can manipulate the camera zoom outside the fixed loop because we 
-        // increment by set numbers, and only on keyinputs
-        if let Ok(mut cam_p) = cam.get_single_mut() {
-            if *key == keybinds.camera_zoom_in {
-                cam_p.scale -= 0.05;
-                cam_p.scale = (cam_p.scale * 100.).round() / 100.;
-                cam_p.scale = cam_p.scale.clamp(0.05, 0.5);
-            }
-            if *key == keybinds.camera_zoom_out {
-                cam_p.scale += 0.05;
-                cam_p.scale = (cam_p.scale * 100.).round() / 100.;
-                cam_p.scale = cam_p.scale.clamp(0.05, 0.5);
-            }
+    if keybinds.key_left.pressed( &system ) {
+        movement_vec.x = -1.; 
+    }
+    if keybinds.key_right.pressed( &system ) {
+        movement_vec.y = -1.; 
+    }
+    if keybinds.key_down.pressed( &system ) {
+        movement_vec.x = 1.; 
+    }
+    if keybinds.camera_rot_left.pressed( &system ) {
+        camera_mov = 1.;
+    }
+    if keybinds.camera_rot_right.pressed( &system ) {
+        camera_mov = -1.;
+    }
+
+    // We can manipulate the camera zoom outside the fixed loop because we 
+    // increment by set numbers, and only on keyinputs
+    if let Ok(mut cam_p) = cam.get_single_mut() {
+        if keybinds.camera_reset.just_pressed( &system ) {
+            camera_reset = true;
+        }
+        if keybinds.camera_zoom_in.just_pressed( &system ) {
+            cam_p.scale -= 0.05;
+            cam_p.scale = (cam_p.scale * 100.).round() / 100.;
+            cam_p.scale = cam_p.scale.clamp(0.05, 0.5);
+        }
+        if keybinds.camera_zoom_out.just_pressed( &system ) {
+            cam_p.scale += 0.05;
+            cam_p.scale = (cam_p.scale * 100.).round() / 100.;
+            cam_p.scale = cam_p.scale.clamp(0.05, 0.5);
         }
     }
+    
 
 
     movement_vec = movement_vec.normalize_or_zero();
 
     // Update player component with input values
-    player.firing = keyboard.pressed(keybinds.weapon_fire);
+    player.firing = keybinds.weapon_fire.pressed( &system );
     player.velocity = movement_vec;
     player.camera_velocity = camera_mov;
 }
