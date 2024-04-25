@@ -9,6 +9,7 @@ mod states;
 mod editor;
 mod rapier;
 mod stateful;
+mod editor_camera;
 
 use bevy::prelude::*;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;

@@ -1,10 +1,11 @@
 use bevy::app::PluginGroupBuilder;
 use bevy::prelude::*;
 
+use crate::editor_camera::EditorCameraPlugin;
 use crate::health::HealthPlugin;
 use crate::projectile::ProjectilePlugin;
 use crate::player::PlayerPlugin;
-use crate::input::InputPlugin;
+use crate::input::{InputPlugin, Keybinds};
 use crate::entity::EntityPlugin;
 use crate::rapier::RapierPlugin;
 // TODO: Plugin bundle for a gameplay, and an editor state
@@ -13,6 +14,15 @@ use crate::rapier::RapierPlugin;
 pub enum AppStates {
     Editor,
     Gameplay
+}
+
+impl AppStates {
+    pub fn next(&self) -> AppStates {
+        match self {
+            AppStates::Editor => AppStates::Gameplay,
+            AppStates::Gameplay => AppStates::Editor, 
+        }
+    }
 }
 
 #[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
@@ -36,6 +46,7 @@ impl PluginGroup for GlobalPlugins {
 impl PluginGroup for EditorPlugins {
     fn build(self) -> bevy::app::PluginGroupBuilder {
         PluginGroupBuilder::start::<Self>()
+            .add(EditorCameraPlugin)
     }
 }
 impl PluginGroup for GameplayPlugins {
@@ -55,6 +66,7 @@ impl Plugin for StateManager {
         app.add_plugins(GlobalPlugins);
         app.add_plugins(GameplayPlugins);
         app.add_plugins(EditorPlugins);
+        app.add_systems(Update, change_state);
         app.configure_sets(Startup, 
             (
               AppSet::Gameplay.run_if( in_state(AppStates::Gameplay)),
@@ -79,5 +91,15 @@ impl Plugin for StateManager {
               AppSet::Editor.run_if( in_state(AppStates::Editor))  
             )
         );
+    }
+}
+
+fn change_state(
+    input: Res<Keybinds>,
+    state: Res<State<AppStates>>,
+    mut next: ResMut<NextState<AppStates>>
+) {
+    if input.change_state.active {
+        next.set( state.next() );
     }
 }

@@ -1,14 +1,14 @@
 use bevy::{prelude::*, window::PrimaryWindow};
 use bevy_rapier2d::prelude::*;
 use crate::{
-    entity::EntityRotate, health::Health, input::Keybinds, projectile::{ProjectileAsset, ProjectileTargetingType}, projectilepattern::{CirclePattern, IPPattern}, states::AppSet, weapon::Weapon
+    editor_camera::MainCamera, entity::EntityRotate, health::Health, input::Keybinds, projectile::{ProjectileAsset, ProjectileTargetingType}, projectilepattern::{CirclePattern, IPPattern}, states::AppSet, weapon::Weapon
 };
 
 pub struct PlayerPlugin;
 
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup);
+        app.add_systems(Startup, setup.in_set(AppSet::Gameplay) );
         app.add_systems(Update, 
             (
                 update_player_transform,
@@ -53,7 +53,7 @@ fn setup(
     let mut cam = Camera2dBundle::default();
     cam.projection.scale = 0.2;
 
-    let cam_id = commands.spawn( cam ).id();
+    let cam_id = commands.spawn( (cam, MainCamera) ).id();
     let player_id =  commands.spawn( 
     (
         SpriteBundle {
@@ -157,8 +157,8 @@ fn update_player_transform(
 
             if input.key_up.active    { movement_vec.y = 1.;  }
             if input.key_left.active  { movement_vec.x = -1.; }
-            if input.key_right.active { movement_vec.y = -1.; }
-            if input.key_down.active  { movement_vec.x = 1.;  }
+            if input.key_right.active { movement_vec.x = 1.; }
+            if input.key_down.active  { movement_vec.y = -1.;  }
 
             movement_vec = movement_vec.normalize_or_zero();
             // As we are rotating the player, 

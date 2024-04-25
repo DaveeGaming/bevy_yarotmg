@@ -60,7 +60,7 @@ pub struct ProjectileAsset {
 
 impl Plugin for ProjectilePlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup.in_set(AppSet::Gameplay));
+        app.add_systems(Startup, setup);
         app.add_event::<StatefulEvent<PState>>();
         app.add_systems(FixedUpdate, 
             (

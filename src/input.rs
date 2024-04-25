@@ -1,4 +1,4 @@
-use bevy::prelude::*;
+use bevy::{input::mouse::{MouseScrollUnit, MouseWheel}, prelude::*, utils::info};
 use crate::player;
 
 
@@ -84,11 +84,17 @@ pub struct Keybinds {
     pub key_left: Key,
     pub key_down: Key,
 
+    pub modifier_key: Key,
+
     pub camera_rot_left: Key,
     pub camera_rot_right: Key,
     pub camera_zoom_in: Key,
     pub camera_zoom_out: Key,
     pub camera_reset: Key,
+
+    pub change_state: Key,
+
+    pub scroll_wheel: f32,
 }
 
 
@@ -102,17 +108,24 @@ impl Plugin for InputPlugin {
 
                 key_up: Key::keyboard(KeyCode::KeyW),            
                 key_left: Key::keyboard(KeyCode::KeyA),            
-                key_right: Key::keyboard(KeyCode::KeyS),            
-                key_down: Key::keyboard(KeyCode::KeyD),            
+                key_right: Key::keyboard(KeyCode::KeyD),            
+                key_down: Key::keyboard(KeyCode::KeyS),            
+
+                modifier_key: Key::keyboard(KeyCode::ShiftLeft),
 
                 camera_rot_left: Key::keyboard(KeyCode::KeyQ),
                 camera_rot_right: Key::keyboard(KeyCode::KeyE),
                 camera_zoom_in: Key::keyboard(KeyCode::KeyO),
                 camera_zoom_out: Key::keyboard(KeyCode::KeyP),
                 camera_reset: Key::keyboard(KeyCode::KeyR),
+
+                change_state: Key::keyboard(KeyCode::Tab),
+
+                scroll_wheel: 0.,
             });
         // app.add_systems(Startup, setup);
         app.add_systems(Update, input_manager );
+        app.add_systems(Update, mouse_wheel );
     }
 }
 
@@ -139,14 +152,28 @@ fn input_manager(
     keybinds.key_left.pressed( &system );
     keybinds.key_right.pressed( &system );
 
+    keybinds.modifier_key.pressed( &system );
+
     keybinds.camera_rot_left.pressed( &system );
     keybinds.camera_rot_right.pressed( &system );
-
-
     keybinds.camera_reset.just_pressed( &system );
     keybinds.camera_zoom_in.just_pressed( &system );
     keybinds.camera_zoom_out.just_pressed( &system );
 
-    // We can manipulate the camera zoom outside the fixed loop because we 
-    // increment by set numbers, and only on keyinputs
+
+    keybinds.change_state.just_pressed( &system );
+}
+
+fn mouse_wheel(
+    mut keybinds: ResMut<Keybinds>,
+    mut scroll: EventReader<MouseWheel>
+) {
+    let mut val = 0.;
+    for event in scroll.read() {
+        match event.unit {
+            MouseScrollUnit::Line => val = event.y,
+            _ => ()
+        }
+    }
+    keybinds.scroll_wheel = val;
 }
