@@ -9,9 +9,13 @@ pub struct PlayerPlugin;
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, setup);
-        app.add_systems(FixedUpdate, update_player_transform);
-        app.add_systems(Update, update_player_camera);
-        app.add_systems(Update, update_weapon);
+        app.add_systems(Update, 
+            (
+                update_player_transform,
+                update_player_camera,
+                update_weapon
+            )
+        );
     }
 }
 
@@ -21,10 +25,7 @@ pub struct Player {
     pub weapon: Option<Weapon>,
 
     // All set by the input system
-    pub firing: bool,
-    pub velocity: Vec2,
     pub movement_speed: f32,
-    pub camera_velocity: f32,
 
     pub camera_rot_speed: f32,
 }
@@ -33,12 +34,8 @@ impl Default for Player {
     fn default() -> Self {
         Player {
             weapon: Some(Weapon::default()),
-            firing: false,
 
-            velocity: Default::default(),
-            movement_speed: 2.,
-
-            camera_velocity: 0.,
+            movement_speed: 100.,
             camera_rot_speed: 3.,
         }
     }
@@ -89,6 +86,7 @@ fn setup(
 
 fn update_weapon(
     time: Res<Time>,
+    input: Res<Keybinds>,
     commands: Commands,
     window: Query<&Window, With<PrimaryWindow>>,
     camera: Query< (&Camera, &GlobalTransform)>,
@@ -110,7 +108,7 @@ fn update_weapon(
     // constantly, even when we aren't shooting
     if player.weapon.is_some() {
         // cache out the firing, because we request weapon as mutable later
-        let firing = player.firing;
+        let firing = input.weapon_fire.active;
         let time = time.delta().as_secs_f32();
         let wp = player.weapon.as_mut().unwrap();
 
@@ -149,14 +147,25 @@ fn update_weapon(
 
 fn update_player_transform(
     mut player: Query<(&mut Transform, &Player)>,
+    time: Res<Time>,
+    input: Res<Keybinds>
 ) {
     // Errors if we have zero or multiple players
     match player.get_single_mut() {
         Ok( (mut transform, player) ) => {
+
+            let mut movement_vec = Vec2::default();
+
+            if input.key_up.active    { movement_vec.y = 1.;  }
+            if input.key_left.active  { movement_vec.x = -1.; }
+            if input.key_right.active { movement_vec.y = -1.; }
+            if input.key_down.active  { movement_vec.x = 1.;  }
+
+            movement_vec = movement_vec.normalize_or_zero();
             // As we are rotating the player, 
             // our "UP" direction changes, we should reflect that in our movement
             let movement = 
-                (Vec2::splat(player.movement_speed) * player.velocity)
+                (Vec2::splat(player.movement_speed * time.delta_seconds()) * movement_vec)
                     .extend(0.);
 
             let rotation = transform.rotation;
@@ -167,21 +176,40 @@ fn update_player_transform(
 }
 
 fn update_player_camera(
-    keybinds: Res<Keybinds>,
+    input: Res<Keybinds>,
     time: Res<Time>,
     mut player: Query<(&mut Transform, &Player)>,
+    mut cam: Query<&mut OrthographicProjection, With<Camera>>
 ) {
 
     // FIXME: Camera jitters when reset
     // Errors if we have zero or multiple players
     match player.get_single_mut() {
         Ok( (mut transform, player) ) => {
-            transform.rotate_z( player.camera_velocity * player.camera_rot_speed * time.delta_seconds() );
-            if keybinds.camera_reset.active {
+            let mut camera_velocity = 0.;
+            if input.camera_rot_left.active { camera_velocity = 1.;}
+            if input.camera_rot_right.active { camera_velocity = -1.;}
+
+
+            transform.rotate_z( camera_velocity * player.camera_rot_speed * time.delta_seconds() );
+            if input.camera_reset.active {
                 let current = transform.rotation.to_euler(EulerRot::XYZ);
                 transform.rotation = Quat::from_euler(EulerRot::XYZ, current.0, current.1, 0.);
             }
         },
         Err(_) => warn_once!("No Player found for update_player_transform"),
+    }
+
+    if let Ok(mut cam_p) = cam.get_single_mut() {
+        if input.camera_zoom_in.active {
+            cam_p.scale -= 0.05;
+            cam_p.scale = (cam_p.scale * 100.).round() / 100.;
+            cam_p.scale = cam_p.scale.clamp(0.05, 0.5);
+        }
+        if input.camera_zoom_out.active {
+            cam_p.scale += 0.05;
+            cam_p.scale = (cam_p.scale * 100.).round() / 100.;
+            cam_p.scale = cam_p.scale.clamp(0.05, 0.5);
+        }
     }
 }

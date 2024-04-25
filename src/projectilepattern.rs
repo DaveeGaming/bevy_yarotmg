@@ -1,6 +1,6 @@
 use bevy::{math::f32, prelude::*};
 
-use crate::{projectile::{PState, Projectile, ProjectileTargetingType}, states::{StateDuration, StateRepeat, Stateful}};
+use crate::{projectile::{PState, Projectile, ProjectileTargetingType}, stateful::{StateDuration, StateRepeat, Stateful}};
 use bevy_rapier2d::prelude::*;
 
 /// Used for building custom bullet patterns, 

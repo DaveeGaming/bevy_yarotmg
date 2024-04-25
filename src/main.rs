@@ -5,8 +5,10 @@ mod weapon;
 mod projectile;
 mod health;
 mod projectilepattern;
-mod rapier;
 mod states;
+mod editor;
+mod rapier;
+mod stateful;
 
 use bevy::prelude::*;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;

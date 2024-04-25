@@ -125,72 +125,28 @@ fn input_manager(
     keyboard: Res<ButtonInput<KeyCode>>,
     mouse: Res<ButtonInput<MouseButton>>,
     gamepad: Res<ButtonInput<GamepadButton>>,
-    mut player: Query<&mut player::Player>,
-    mut cam: Query<&mut OrthographicProjection, With<Camera>>
 ) {
-
-    // Errors if we have zero or multiple player components
-    let player = player.get_single_mut();
-    if player.is_err() {
-        warn_once!("Player component not found in input_manager");
-        return;
-    }
-    let mut player = player.unwrap();
-
     let system = InputSystem {
         keyboard: keyboard,
         mouse: mouse,
         gamepad: gamepad,
     };
 
-    let mut movement_vec = Vec2::default();
-    let mut camera_mov = 0.;
-    let mut camera_reset = false;
+    keybinds.weapon_fire.pressed( &system );
 
-    if keybinds.key_up.pressed( &system ) {
-        movement_vec.y = 1.; 
-    }
+    keybinds.key_up.pressed( &system );
+    keybinds.key_down.pressed( &system );
+    keybinds.key_left.pressed( &system );
+    keybinds.key_right.pressed( &system );
 
-    if keybinds.key_left.pressed( &system ) {
-        movement_vec.x = -1.; 
-    }
-    if keybinds.key_right.pressed( &system ) {
-        movement_vec.y = -1.; 
-    }
-    if keybinds.key_down.pressed( &system ) {
-        movement_vec.x = 1.; 
-    }
-    if keybinds.camera_rot_left.pressed( &system ) {
-        camera_mov = 1.;
-    }
-    if keybinds.camera_rot_right.pressed( &system ) {
-        camera_mov = -1.;
-    }
+    keybinds.camera_rot_left.pressed( &system );
+    keybinds.camera_rot_right.pressed( &system );
+
+
+    keybinds.camera_reset.just_pressed( &system );
+    keybinds.camera_zoom_in.just_pressed( &system );
+    keybinds.camera_zoom_out.just_pressed( &system );
 
     // We can manipulate the camera zoom outside the fixed loop because we 
     // increment by set numbers, and only on keyinputs
-    if let Ok(mut cam_p) = cam.get_single_mut() {
-        if keybinds.camera_reset.just_pressed( &system ) {
-            camera_reset = true;
-        }
-        if keybinds.camera_zoom_in.just_pressed( &system ) {
-            cam_p.scale -= 0.05;
-            cam_p.scale = (cam_p.scale * 100.).round() / 100.;
-            cam_p.scale = cam_p.scale.clamp(0.05, 0.5);
-        }
-        if keybinds.camera_zoom_out.just_pressed( &system ) {
-            cam_p.scale += 0.05;
-            cam_p.scale = (cam_p.scale * 100.).round() / 100.;
-            cam_p.scale = cam_p.scale.clamp(0.05, 0.5);
-        }
-    }
-    
-
-
-    movement_vec = movement_vec.normalize_or_zero();
-
-    // Update player component with input values
-    player.firing = keybinds.weapon_fire.pressed( &system );
-    player.velocity = movement_vec;
-    player.camera_velocity = camera_mov;
 }

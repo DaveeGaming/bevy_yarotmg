@@ -3,7 +3,7 @@ use bevy_rapier2d::{geometry::Collider, pipeline::QueryFilter, plugin::RapierCon
 use crate::{
     health::Health, 
     player::Player, 
-    states::{State, StateDuration, Stateful, StatefulEvent}
+    stateful::{State, StateDuration, Stateful, StatefulEvent}
 };
 
 pub struct ProjectilePlugin;
@@ -177,8 +177,8 @@ fn update_projectile_position(
 //                     }
 
 //                     if entities.get(*e2).is_ok() && projectiles.get(*e1).is_ok() {
-//                         let (_, mut projectile) = projectiles.get(*e1).unwrap();
-//                         let (_, mut health) = entities.get_mut(*e2).unwrap();
+    //                         let (_, mut projectile) = projectiles.get(*e1).unwrap();
+    //                         let (_, mut health) = entities.get_mut(*e2).unwrap();
 
 //                         health.current -= projectile.damage;
 //                         commands.entity(*e1).despawn();

@@ -6,7 +6,7 @@ pub struct EntityPlugin;
 
 impl Plugin for EntityPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(FixedPostUpdate, update_entity_rotation);
+        app.add_systems(PostUpdate, update_entity_rotation);
     }
 }
 
@@ -14,6 +14,7 @@ impl Plugin for EntityPlugin {
 pub struct EntityRotate;
 
 /// Rotate every entity to the same orientation as the player
+// TODO: Don't use the player component, instead use an EntityRotateRoot component
 fn update_entity_rotation(
     mut entities: Query<&mut Transform, (With<EntityRotate>, Without<Player>)>,
     player: Query<&mut Transform, With<Player>>
