@@ -3,7 +3,7 @@ use bevy_rapier2d::{geometry::Collider, pipeline::QueryFilter, plugin::RapierCon
 use crate::{
     health::Health, 
     player::Player, 
-    stateful::{State, StateDuration, Stateful, StatefulEvent}
+    stateful::{State, StateDuration, Stateful, StatefulEvent}, states::AppSet
 };
 
 pub struct ProjectilePlugin;
@@ -60,17 +60,21 @@ pub struct ProjectileAsset {
 
 impl Plugin for ProjectilePlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup);
+        app.add_systems(Startup, setup.in_set(AppSet::Gameplay));
         app.add_event::<StatefulEvent<PState>>();
-        app.add_systems(FixedUpdate, increment_states);
-        app.add_systems(FixedUpdate, update_states.after( increment_states )  );
-        app.add_systems(FixedUpdate, update_projectile_position.after( update_states ) );
+        app.add_systems(FixedUpdate, 
+            (
+                increment_states,
+                update_states.after( increment_states ),
+                update_projectile_position.after( update_states ),
+            ).in_set(AppSet::Gameplay)
+        );
         app.add_systems(PostUpdate, 
             (
                 // update_bullet_collision, // It works, i will keep it for an example
                 player_projectile_detection,
                 enemy_projectile_detection
-            ) 
+            ).in_set(AppSet::Gameplay)
         );
     }
 }
@@ -79,6 +83,7 @@ fn setup(
     mut commands: Commands,
     asset_server: Res<AssetServer>
 ) {
+    info!("CALLED!!!");
     commands.insert_resource(
         ProjectileAsset {
             handle: asset_server.load("thing.png"),
@@ -228,26 +233,29 @@ fn player_projectile_detection(
     mut commands: Commands,
     rapier_ctx: Res<RapierContext>,
 ) {
-    let (_, coll, transform, mut health) = player.get_single_mut().expect("Player not found");
+    if let Ok( (_, coll, transform, mut health) ) = player.get_single_mut() {
 
-    rapier_ctx.intersections_with_shape(
-        transform.translation.xy(), //pos
-        transform.rotation.to_euler(EulerRot::XYZ).2, //rot
-        coll, //shape
-        QueryFilter::default(), 
-        |entity| {
-            let p_e = projectiles.get(entity);
-            if p_e.is_ok() {
-                let (id, projectile) = p_e.unwrap();
-                match projectile.targeting_type {
-                    ProjectileTargetingType::ENVIRONMENT | ProjectileTargetingType::ENEMY => {
-                        health.current -= projectile.damage;
-                        commands.entity(id).despawn();
+        rapier_ctx.intersections_with_shape(
+            transform.translation.xy(), //pos
+            transform.rotation.to_euler(EulerRot::XYZ).2, //rot
+            coll, //shape
+            QueryFilter::default(), 
+            |entity| {
+                let p_e = projectiles.get(entity);
+                if p_e.is_ok() {
+                    let (id, projectile) = p_e.unwrap();
+                    match projectile.targeting_type {
+                        ProjectileTargetingType::ENVIRONMENT | ProjectileTargetingType::ENEMY => {
+                            health.current -= projectile.damage;
+                            commands.entity(id).despawn();
+                        }
+                        _ => ()
                     }
-                    _ => ()
                 }
+                true
             }
-            true
-        }
-    )
+        )
+
+    }
+
 }

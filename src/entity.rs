@@ -1,12 +1,12 @@
 use bevy::prelude::*;
 
-use crate::player::Player;
+use crate::{player::Player, states::AppSet};
 
 pub struct EntityPlugin;
 
 impl Plugin for EntityPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(PostUpdate, update_entity_rotation);
+        app.add_systems(PostUpdate, update_entity_rotation.in_set(AppSet::Gameplay) );
     }
 }
 
@@ -23,8 +23,5 @@ fn update_entity_rotation(
         for mut entity in entities.iter_mut() {
             entity.rotation = p_transform.rotation;
         }
-    } else {
-        warn_once!("Player entity not found in entity_rotation");
-    }
-
+    } 
 }

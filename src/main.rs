@@ -12,12 +12,7 @@ mod stateful;
 
 use bevy::prelude::*;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
-use crate::health::HealthPlugin;
-use crate::projectile::ProjectilePlugin;
-use crate::player::PlayerPlugin;
-use crate::input::InputPlugin;
-use crate::entity::EntityPlugin;
-use crate::rapier::RapierPlugin;
+use crate::states::StateManager;
 
 fn main() {
     App::new()
@@ -25,11 +20,6 @@ fn main() {
         .insert_resource(Msaa::Off)
         .insert_resource(Time::from_hz(60.))
         .add_plugins(WorldInspectorPlugin::new())
-        .add_plugins(InputPlugin)
-        .add_plugins(PlayerPlugin)
-        .add_plugins(EntityPlugin)
-        .add_plugins(ProjectilePlugin)
-        .add_plugins(HealthPlugin)
-        .add_plugins(RapierPlugin)
+        .add_plugins(StateManager)
         .run();
 }

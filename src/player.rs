@@ -1,7 +1,7 @@
 use bevy::{prelude::*, window::PrimaryWindow};
 use bevy_rapier2d::prelude::*;
 use crate::{
-    entity::EntityRotate, health::Health, input::Keybinds, projectile::{ProjectileAsset, ProjectileTargetingType}, projectilepattern::{CirclePattern, IPPattern}, weapon::Weapon
+    entity::EntityRotate, health::Health, input::Keybinds, projectile::{ProjectileAsset, ProjectileTargetingType}, projectilepattern::{CirclePattern, IPPattern}, states::AppSet, weapon::Weapon
 };
 
 pub struct PlayerPlugin;
@@ -14,7 +14,7 @@ impl Plugin for PlayerPlugin {
                 update_player_transform,
                 update_player_camera,
                 update_weapon
-            )
+            ).in_set(AppSet::Gameplay)
         );
     }
 }
@@ -97,7 +97,6 @@ fn update_weapon(
 
     // Errors out if we have zero, or multiple player components
     if p.is_err() {
-        warn_once!("Unable to find player in update_weapon");
         return;
     }
 
@@ -171,7 +170,7 @@ fn update_player_transform(
             let rotation = transform.rotation;
             transform.translation += Quat::mul_vec3(rotation, movement); 
         },
-        Err(_) => warn_once!("No Player found for update_player_transform"),
+        Err(_) => ()   
     }
 }
 
@@ -197,7 +196,7 @@ fn update_player_camera(
                 transform.rotation = Quat::from_euler(EulerRot::XYZ, current.0, current.1, 0.);
             }
         },
-        Err(_) => warn_once!("No Player found for update_player_transform"),
+        Err(_) => ()
     }
 
     if let Ok(mut cam_p) = cam.get_single_mut() {

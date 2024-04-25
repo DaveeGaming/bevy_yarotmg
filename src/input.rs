@@ -112,7 +112,7 @@ impl Plugin for InputPlugin {
                 camera_reset: Key::keyboard(KeyCode::KeyR),
             });
         // app.add_systems(Startup, setup);
-        app.add_systems(Update, input_manager);
+        app.add_systems(Update, input_manager );
     }
 }
 
